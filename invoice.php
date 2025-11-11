@@ -184,16 +184,19 @@ if ($action === 'listGroupedInvoices') {
 
                 // ✅ Step 1: Balance Sheet Entry
                 $entry_date = date('Y-m-d');
-                $type = 'debit';
-                $description = $invoice_no . ',' . $agent_name;
+                $type = "debit";
+                $amount = $grand_total;
+                $description = $invoice_no . "," . $agent_name;
 
                 $stmtBalance = $conn->prepare("
-            INSERT INTO balance_sheet (entry_date, type, description)
-            VALUES (?, ?, ?)
+            INSERT INTO balance_sheet (entry_date, type, amount, description)
+            VALUES (?, ?, ?, ?)
         ");
-                $stmtBalance->bind_param("sss", $entry_date, $type, $description);
+                $stmtBalance->bind_param("ssds", $entry_date, $type, $amount, $description);
+
                 $stmtBalance->execute();
                 $stmtBalance->close();
+
 
                 // ✅ Step 2: Customer Check and Insert (as before)
                 $stmtCheckCustomer = $conn->prepare("SELECT * FROM customer WHERE mobile_number = ?");
