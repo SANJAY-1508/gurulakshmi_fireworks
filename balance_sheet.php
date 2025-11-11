@@ -96,7 +96,7 @@ elseif ($action === 'listBalanceSheetByDateRange') {
         $types .= "s";
     }
 
-    $query = "
+    $groupQuery = "
         SELECT 
             `entry_date`,
             SUM(CASE WHEN `type` = 'credit' THEN `amount` ELSE 0 END) as credit_total,
@@ -114,7 +114,7 @@ elseif ($action === 'listBalanceSheetByDateRange') {
         ORDER BY `entry_date` DESC
     ";
 
-    $stmt = $conn->prepare($query);
+    $stmt = $conn->prepare($groupQuery);
     if (!empty($params)) {
         $stmt->bind_param($types, ...$params);
     }
@@ -122,6 +122,8 @@ elseif ($action === 'listBalanceSheetByDateRange') {
     $result = $stmt->get_result();
 
     $groupedEntries = [];
+    $totalCredit = 0;
+    $totalDebit = 0;
     if ($result->num_rows > 0) {
         while ($row = $result->fetch_assoc()) {
             $details = [];
@@ -144,15 +146,29 @@ elseif ($action === 'listBalanceSheetByDateRange') {
                 'debit_total' => (float)$row['debit_total'],
                 'details' => $details
             ];
+            $totalCredit += (float)$row['credit_total'];
+            $totalDebit += (float)$row['debit_total'];
         }
         $output = [
             "head" => ["code" => 200, "msg" => "Success"],
-            "body" => ["grouped_balance_sheets" => $groupedEntries]
+            "body" => [
+                "grouped_balance_sheets" => $groupedEntries,
+                "totals" => [
+                    "paid" => $totalCredit,
+                    "balance" => $totalDebit - $totalCredit
+                ]
+            ]
         ];
     } else {
         $output = [
             "head" => ["code" => 200, "msg" => "No balance sheet entries found"],
-            "body" => ["grouped_balance_sheets" => []]
+            "body" => [
+                "grouped_balance_sheets" => [],
+                "totals" => [
+                    "paid" => 0,
+                    "balance" => 0
+                ]
+            ]
         ];
     }
     $stmt->close();
