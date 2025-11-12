@@ -126,38 +126,37 @@ if ($action === 'listGroupedInvoices') {
     echo json_encode($response, JSON_NUMERIC_CHECK);
     exit();
 } elseif ($action === 'createInvoice') {
-    if ($action === 'createInvoice') {
-        $customer_name = $obj->customer_name ?? null;
-        $state = $obj->state ?? null;
-        $city = $obj->city ?? null;
-        $mobile_number = $obj->mobile_number ?? null;
-        $reference_number = $obj->reference_number ?? null;
-        $agent_name = $obj->agent_name ?? null;
-        $transport_name = $obj->transport_name ?? null;
-        $products = $obj->products ?? null;
-        $overall_total = $obj->overall_total ?? null;
-        $discount = $obj->discount ?? null;
-        $tax = $obj->tax ?? null;
-        $grand_total = $obj->grand_total ?? null;
-        $bill_created_by = $obj->bill_created_by ?? null;
+    $customer_name = $obj->customer_name ?? null;
+    $state = $obj->state ?? null;
+    $city = $obj->city ?? null;
+    $mobile_number = $obj->mobile_number ?? null;
+    $reference_number = $obj->reference_number ?? null;
+    $agent_name = $obj->agent_name ?? null;
+    $transport_name = $obj->transport_name ?? null;
+    $products = $obj->products ?? null;
+    $overall_total = $obj->overall_total ?? null;
+    $discount = $obj->discount ?? null;
+    $tax = $obj->tax ?? null;
+    $grand_total = $obj->grand_total ?? null;
+    $bill_created_by = $obj->bill_created_by ?? null;
 
-        // Escape all input data to prevent SQL injection
-        $customer_name = $conn->real_escape_string($customer_name);
-        $state = $conn->real_escape_string($state);
-        $city = $conn->real_escape_string($city);
-        $mobile_number = $conn->real_escape_string($mobile_number);
-        $reference_number = $conn->real_escape_string($reference_number);
-        $agent_name = $conn->real_escape_string($agent_name);
-        $transport_name = $conn->real_escape_string($transport_name);
-        $products_json = $conn->real_escape_string(json_encode($products, true));
-        $overall_total = $conn->real_escape_string($overall_total);
-        $discount = $conn->real_escape_string($discount);
-        $tax = $conn->real_escape_string($tax);
-        $grand_total = $conn->real_escape_string($grand_total);
-        $bill_created_by = $conn->real_escape_string($bill_created_by);
+    // Escape all input data to prevent SQL injection
+    $customer_name = $conn->real_escape_string($customer_name);
+    $state = $conn->real_escape_string($state);
+    $city = $conn->real_escape_string($city);
+    $mobile_number = $conn->real_escape_string($mobile_number);
+    $reference_number = $conn->real_escape_string($reference_number);
+    $agent_name = $conn->real_escape_string($agent_name);
+    $transport_name = $conn->real_escape_string($transport_name);
+    $products_json = $conn->real_escape_string(json_encode($products, true));
+    $overall_total = $conn->real_escape_string($overall_total);
+    $discount = $conn->real_escape_string($discount);
+    $tax = $conn->real_escape_string($tax);
+    $grand_total = $conn->real_escape_string($grand_total);
+    $bill_created_by = $conn->real_escape_string($bill_created_by);
 
-        // Insert query string directly
-        $insertQuery = "
+    // Insert query string directly
+    $insertQuery = "
         INSERT INTO invoice (
             customer_name, state, city, mobile_number,
             reference_number, agent_name, transport_name, products,
@@ -169,85 +168,82 @@ if ($action === 'listGroupedInvoices') {
         )
     ";
 
-        if ($conn->query($insertQuery)) {
-            $insertId = $conn->insert_id;
+    if ($conn->query($insertQuery)) {
+        $insertId = $conn->insert_id;
 
-            // Generate unique invoice ID
-            $invoice_id = uniqueID("invoice", $insertId);
-            $invoice_no = "INV_" . $insertId;
+        // Generate unique invoice ID
+        $invoice_id = uniqueID("invoice", $insertId);
+        $invoice_no = "INV_" . $insertId;
 
-            // Update invoice with unique invoice_id & invoice_no
-            $stmtUpdateInvoice = $conn->prepare("UPDATE invoice SET invoice_id = ?, invoice_no = ? WHERE id = ?");
-            $stmtUpdateInvoice->bind_param("ssi", $invoice_id, $invoice_no, $insertId);
+        // Update invoice with unique invoice_id & invoice_no
+        $stmtUpdateInvoice = $conn->prepare("UPDATE invoice SET invoice_id = ?, invoice_no = ? WHERE id = ?");
+        $stmtUpdateInvoice->bind_param("ssi", $invoice_id, $invoice_no, $insertId);
 
-            if ($stmtUpdateInvoice->execute()) {
+        if ($stmtUpdateInvoice->execute()) {
 
-                // ✅ Step 1: Balance Sheet Entry
-                $entry_date = date('Y-m-d');
-                $type = "debit";
-                $amount = $grand_total;
-                $description = $invoice_no . "," . $agent_name;
+            // ✅ Step 1: Balance Sheet Entry
+            $entry_date = date('Y-m-d');
+            $type = "debit";
+            $amount = $grand_total;
+            $description = $invoice_no . "," . $agent_name;
 
-                $stmtBalance = $conn->prepare("
-            INSERT INTO balance_sheet (entry_date, type, amount, description)
-            VALUES (?, ?, ?, ?)
-        ");
-                $stmtBalance->bind_param("ssds", $entry_date, $type, $amount, $description);
-
-                $stmtBalance->execute();
-                $stmtBalance->close();
-
-
-                // ✅ Step 2: Customer Check and Insert (as before)
-                $stmtCheckCustomer = $conn->prepare("SELECT * FROM customer WHERE mobile_number = ?");
-                $stmtCheckCustomer->bind_param("s", $mobile_number);
-                $stmtCheckCustomer->execute();
-                $customerResult = $stmtCheckCustomer->get_result();
-
-                if ($customerResult->num_rows === 0) {
-                    $stmtInsertCustomer = $conn->prepare("
-                INSERT INTO customer (
-                    customer_name, state, city, mobile_number,
-                    reference_number, agent_name, transport_name, create_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+            $stmtBalance = $conn->prepare("
+                INSERT INTO balance_sheet (entry_date, type, amount, description)
+                VALUES (?, ?, ?, ?)
             ");
-                    $stmtInsertCustomer->bind_param(
-                        "sssssss",
-                        $customer_name,
-                        $state,
-                        $city,
-                        $mobile_number,
-                        $reference_number,
-                        $agent_name,
-                        $transport_name
-                    );
-                    $stmtInsertCustomer->execute();
-                    $stmtInsertCustomer->close();
-                }
+            $stmtBalance->bind_param("ssds", $entry_date, $type, $amount, $description);
 
-                $stmtCheckCustomer->close();
+            $stmtBalance->execute();
+            $stmtBalance->close();
 
-                $query = "SELECT * FROM invoice WHERE delete_at = 0 AND id = $insertId ORDER BY create_at DESC";
-                $result = $conn->query($query);
 
-                if ($result && $result->num_rows > 0) {
-                    $invoices = $result->fetch_all(MYSQLI_ASSOC);
-                }
+            // ✅ Step 2: Customer Check and Insert (as before)
+            $stmtCheckCustomer = $conn->prepare("SELECT * FROM customer WHERE mobile_number = ?");
+            $stmtCheckCustomer->bind_param("s", $mobile_number);
+            $stmtCheckCustomer->execute();
+            $customerResult = $stmtCheckCustomer->get_result();
 
-                $response = successResponse(200, "Invoice created and updated successfully", [
-                    "invoices" => $invoices,
-                    "invoice_no" => $invoice_no
-                ]);
-            } else {
-                $response = errorResponse(400, "Failed to update invoice ID/number");
+            if ($customerResult->num_rows === 0) {
+                $stmtInsertCustomer = $conn->prepare("
+                    INSERT INTO customer (
+                        customer_name, state, city, mobile_number,
+                        reference_number, agent_name, transport_name, create_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+                ");
+                $stmtInsertCustomer->bind_param(
+                    "sssssss",
+                    $customer_name,
+                    $state,
+                    $city,
+                    $mobile_number,
+                    $reference_number,
+                    $agent_name,
+                    $transport_name
+                );
+                $stmtInsertCustomer->execute();
+                $stmtInsertCustomer->close();
             }
 
-            $stmtUpdateInvoice->close();
+            $stmtCheckCustomer->close();
+
+            $query = "SELECT * FROM invoice WHERE delete_at = 0 AND id = $insertId ORDER BY create_at DESC";
+            $result = $conn->query($query);
+
+            if ($result && $result->num_rows > 0) {
+                $invoices = $result->fetch_all(MYSQLI_ASSOC);
+            }
+
+            $response = successResponse(200, "Invoice created and updated successfully", [
+                "invoices" => $invoices,
+                "invoice_no" => $invoice_no
+            ]);
         } else {
-            $response = errorResponse(400, "Failed to insert invoice data: " . $stmtInsertInvoice->error);
+            $response = errorResponse(400, "Failed to update invoice ID/number");
         }
+
+        $stmtUpdateInvoice->close();
     } else {
-        $response = errorResponse(400, "Some required fields are missing.");
+        $response = errorResponse(400, "Failed to insert invoice data: " . $conn->error);
     }
 } elseif ($action === 'updateinvoice') {
     $invoice_id = $obj->invoice_id ?? null;
@@ -294,7 +290,15 @@ if ($action === 'listGroupedInvoices') {
         );
 
         if ($stmt->execute()) {
-            $response = successResponse(200, "Invoice Updated Successfully", ["id" => $invoice_id]);
+            // Fetch the updated invoice for return (flat structure)
+            $stmtFetch = $conn->prepare("SELECT * FROM invoice WHERE id = ?");
+            $stmtFetch->bind_param("i", $invoice_id);
+            $stmtFetch->execute();
+            $result = $stmtFetch->get_result();
+            $updatedInvoice = $result->fetch_assoc();
+            $stmtFetch->close();
+
+            $response = successResponse(200, "Invoice Updated Successfully", ["invoices" => [$updatedInvoice]]);
         } else {
             $response = errorResponse(400, "Failed to Update Invoice. Error: " . $stmt->error);
         }
